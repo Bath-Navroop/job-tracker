@@ -1,6 +1,13 @@
 spring:
   application:
     name: job-tracker
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+  mvc:
+    problemdetails:
+      enabled: true
 
 management:
   endpoint:

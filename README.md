@@ -11,6 +11,8 @@ A web app that pulls job postings from public job boards every day, ranks them a
 - Java 25, Spring Boot 4.1
 - PostgreSQL 18, run locally with Docker Compose
 - Flyway for database migrations
+- Spring Data JPA (Hibernate) for database access
+- Argon2id password hashing (Spring Security crypto)
 - Maven (through the Maven Wrapper, so no separate Maven install is needed)
 - JUnit 5 and Testcontainers for tests
 - GitHub Actions for CI: every push to `main` and every pull request builds the app and runs the tests
@@ -61,6 +63,20 @@ Requires Docker, with Docker running.
 ```
 
 The tests start their own throwaway PostgreSQL container with Testcontainers, separate from the one in `compose.yaml`, so they never touch development data.
+
+## API
+
+| Method | Path | What it does |
+| --- | --- | --- |
+| `POST` | `/api/auth/register` | Creates an account from an email and a 15 to 128 character password. Returns `201` with the account's id and email, or `409` if the email is already registered. |
+
+Errors use the standard [problem details](https://www.rfc-editor.org/rfc/rfc9457) JSON format. To try it with the app running:
+
+```bash
+curl -i http://localhost:8080/api/auth/register \
+  -H 'Content-Type: application/json' \
+  -d '{"email": "you@example.com", "password": "a long passphrase you will remember"}'
+```
 
 ## Design decisions
 

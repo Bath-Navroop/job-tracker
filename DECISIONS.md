@@ -61,3 +61,21 @@ Technical choices for this project: what was chosen, what was rejected, and why.
 **Chose:** Constraints in the schema itself: email unique and stored in lowercase; application status limited to five values by a check constraint; applications tied to their user by a foreign key that deletes them with the user; an index on `applications.user_id`; auto-incrementing `bigint` ids.
 **Rejected:** Checking these rules only in Java; a PostgreSQL enum type for status; UUID ids.
 **Why:** The app will validate input too, but the database is the last line of defense: no bug or hand-written SQL can create two accounts for one email or an application with a made-up status. A check constraint can be changed by a later migration, while values cannot be removed from a PostgreSQL enum type. Every applications query filters by user, and PostgreSQL does not index foreign key columns on its own. Plain numeric ids are the simplest fit for JPA, and guessing one gains nothing, because every lookup also checks the owner.
+
+## 2026-10-24: Spring Data JPA (Hibernate) for database access
+
+**Chose:** Spring Data JPA with Hibernate. Hibernate only validates the schema at startup (`ddl-auto: validate`), and open-session-in-view is off.
+**Rejected:** Spring Data JDBC; hand-written SQL everywhere with `JdbcClient`.
+**Why:** JPA is the standard Java persistence API and what most Spring codebases use, and repositories turn method names like `existsByEmail` into queries. Flyway still owns the schema; Hibernate only checks at startup that the Java classes match the tables, so a mismatch fails immediately instead of at the first query. With open-session-in-view off, database access happens only inside the service layer, never lazily while the response is being written.
+
+## 2026-10-24: Passwords hashed with Argon2id
+
+**Chose:** Argon2id through Spring Security's `Argon2PasswordEncoder`, at OWASP's minimum settings (19 MiB of memory, 2 iterations, parallelism 1), wrapped in a `DelegatingPasswordEncoder` so every stored hash starts with `{argon2}`.
+**Rejected:** bcrypt, Spring Security's default; encrypting passwords.
+**Why:** Hashing is one-way. Login hashes the typed password and compares the result, so a stolen database never reveals the passwords themselves, while an encrypted password can be decrypted by anyone who also gets the key. OWASP's Password Storage Cheat Sheet lists Argon2id first and places bcrypt under legacy systems. Argon2id is memory-hard, so every guess costs an attacker memory as well as time, which blunts GPU cracking. The `{argon2}` prefix records which algorithm made each hash, so the algorithm can change later without breaking existing accounts. The cost is one extra dependency, BouncyCastle, which Spring's Argon2 implementation needs.
+
+## 2026-10-24: Registration rules
+
+**Chose:** Emails trimmed and lowercased before saving; passwords of 15 to 128 characters with no required symbols or digits; a duplicate email returns `409 Conflict`; errors use the RFC 9457 problem details format.
+**Rejected:** The older 8-character minimum with required character types.
+**Why:** NIST SP 800-63B-4 requires at least 15 characters for a password that is the only login factor, asks that at least 64 be allowed, and forbids rules forcing character types, because long passphrases are both stronger and easier to remember. The duplicate check in Java gives a clear error message; the unique constraint in the database still catches two sign-ups racing each other. Problem details is a standard JSON error format, so the frontend can handle every error the same way.
