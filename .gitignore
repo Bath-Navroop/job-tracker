@@ -1,0 +1,15 @@
+# Build output
+target/
+
+# IntelliJ IDEA
+.idea/
+*.iml
+
+# VS Code
+.vscode/
+
+# macOS
+.DS_Store
+
+# Local secrets
+.env
