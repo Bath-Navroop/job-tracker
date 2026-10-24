@@ -12,7 +12,7 @@ A web app that pulls job postings from public job boards every day, ranks them a
 - PostgreSQL 18, run locally with Docker Compose
 - Flyway for database migrations
 - Spring Data JPA (Hibernate) for database access
-- Argon2id password hashing (Spring Security crypto)
+- Spring Security: Argon2id password hashing and JWT bearer tokens
 - Maven (through the Maven Wrapper, so no separate Maven install is needed)
 - JUnit 5 and Testcontainers for tests
 - GitHub Actions for CI: every push to `main` and every pull request builds the app and runs the tests
@@ -28,6 +28,12 @@ Requires JDK 25 and Docker, with Docker running.
 ```
 
 On startup, Spring Boot starts the PostgreSQL container defined in `compose.yaml`, and it stops the container on shutdown. Docker publishes the database on a free port on 127.0.0.1, and Spring Boot finds that port on its own. The data lives in a Docker volume, so it survives restarts.
+
+Login tokens are signed with the base64 key in the `JWT_SECRET` environment variable. Locally you can leave it unset: the app then makes a random key at startup, so tokens stop working after a restart. To keep them working across restarts:
+
+```bash
+export JWT_SECRET=$(openssl rand -base64 32)
+```
 
 Then, in another terminal:
 
@@ -69,11 +75,19 @@ The tests start their own throwaway PostgreSQL container with Testcontainers, se
 | Method | Path | What it does |
 | --- | --- | --- |
 | `POST` | `/api/auth/register` | Creates an account from an email and a 15 to 128 character password. Returns `201` with the account's id and email, or `409` if the email is already registered. |
+| `POST` | `/api/auth/login` | Checks an email and password. Returns `200` with a bearer token valid for one hour, or `401`. |
+| `GET` | `/api/auth/me` | Returns the logged-in account's id and email. |
+
+Every endpoint except register, login and health needs the token in an `Authorization: Bearer <token>` header.
 
 Errors use the standard [problem details](https://www.rfc-editor.org/rfc/rfc9457) JSON format. To try it with the app running:
 
 ```bash
 curl -i http://localhost:8080/api/auth/register \
+  -H 'Content-Type: application/json' \
+  -d '{"email": "you@example.com", "password": "a long passphrase you will remember"}'
+
+curl -i http://localhost:8080/api/auth/login \
   -H 'Content-Type: application/json' \
   -d '{"email": "you@example.com", "password": "a long passphrase you will remember"}'
 ```

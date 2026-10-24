@@ -1,7 +1,5 @@
 package com.navroopbath.jobtracker.auth;
 
-import java.util.Locale;
-
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -21,7 +19,7 @@ class RegistrationService {
     }
 
     User register(String email, String password) {
-        String normalizedEmail = email.trim().toLowerCase(Locale.ROOT);
+        String normalizedEmail = User.normalizeEmail(email);
         if (users.existsByEmail(normalizedEmail)) {
             throw new EmailAlreadyRegisteredException();
         }

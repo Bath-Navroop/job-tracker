@@ -79,3 +79,15 @@ Technical choices for this project: what was chosen, what was rejected, and why.
 **Chose:** Emails trimmed and lowercased before saving; passwords of 15 to 128 characters with no required symbols or digits; a duplicate email returns `409 Conflict`; errors use the RFC 9457 problem details format.
 **Rejected:** The older 8-character minimum with required character types.
 **Why:** NIST SP 800-63B-4 requires at least 15 characters for a password that is the only login factor, asks that at least 64 be allowed, and forbids rules forcing character types, because long passphrases are both stronger and easier to remember. The duplicate check in Java gives a clear error message; the unique constraint in the database still catches two sign-ups racing each other. Problem details is a standard JSON error format, so the frontend can handle every error the same way.
+
+## 2026-10-24: JWT bearer tokens for the API
+
+**Chose:** On login the API issues a JSON Web Token signed with HS256, valid for one hour, holding the user's id and email. Spring Security's OAuth2 resource server checks the signature, expiry and issuer of every request. The signing key comes from the `JWT_SECRET` environment variable; when it is unset (local development, tests), the app generates a random key at startup.
+**Rejected:** Server-side sessions with a cookie; random tokens stored in the database; long-lived tokens.
+**Why:** Checking a JWT needs no database lookup, because the signature proves this server issued it, so any copy of the app can verify a request. The cost is that a single token cannot be cancelled before it expires, which is why tokens last one hour. HS256 with one shared secret fits because the same app both issues and checks tokens; RSA key pairs pay off once other services need to verify them. The random-key fallback fails safe: a forgotten secret makes tokens stop working after a restart instead of signing them with a key anyone could read in the repo. CSRF protection is off because the token travels in the `Authorization` header, which a browser never attaches on its own the way it does cookies.
+
+## 2026-10-24: Login does not reveal which emails have accounts
+
+**Chose:** A wrong password and an unknown email get the same `401` and message, and an unknown email still runs a full password check against a placeholder hash.
+**Rejected:** A "no account with that email" message.
+**Why:** A different message, or a faster reply when there is no account to check, would let anyone discover who uses the app.
