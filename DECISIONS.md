@@ -25,3 +25,21 @@ Technical choices for this project: what was chosen, what was rejected, and why.
 **Chose:** `@SpringBootTest` with a random port, calling the endpoint over real HTTP with `RestTestClient`.
 **Rejected:** MockMvc, which calls controllers without starting a server.
 **Why:** The test should prove what a real client sees: the server starts, listens, and answers. A random port means the test never collides with a copy of the app already running on 8080. MockMvc is faster and will suit the many controller tests in later milestones.
+
+## 2026-10-23: PostgreSQL 18, run with Docker Compose
+
+**Chose:** The official `postgres:18` image, defined in `compose.yaml` and started by Spring Boot's Docker Compose support when the app starts.
+**Rejected:** Installing PostgreSQL on the laptop with Homebrew; PostgreSQL 19.
+**Why:** The compose file pins the database version inside the repo, so every machine runs the same database with one command and nothing to install besides Docker. The `18` tag picks up minor releases (bug and security fixes) but never moves to a new major version on its own. PostgreSQL 19 is still a release candidate, with general availability planned for November 2026, so moving to it later will be a deliberate change. Docker picks a free host port for the database instead of 5432, and Spring Boot reads which port it got, so it never collides with another project's database already on 5432. That port is published on 127.0.0.1 only, so other machines on the network cannot reach the database; that is why plain development credentials in the file are acceptable. Production credentials will come from the environment, never from the repo.
+
+## 2026-10-23: Health endpoint lists its components
+
+**Chose:** `management.endpoint.health.show-components: always`, so `/actuator/health` lists each check (`db`, `diskSpace`, `ping` and so on) with its own status.
+**Rejected:** The default, which shows only the overall status; `show-details: always`, which also exposes disk paths and sizes and details about the database.
+**Why:** When the app reports DOWN, the response should say which part failed. Component names and statuses reveal nothing sensitive. Details can be turned on for signed-in administrators once the app has authentication.
+
+## 2026-10-23: Tests use Testcontainers, not an in-memory database
+
+**Chose:** Testcontainers starts a fresh `postgres:18` container for the test run, and `@ServiceConnection` points the app at it.
+**Rejected:** H2, an in-memory database; reusing the Docker Compose database.
+**Why:** H2 only imitates PostgreSQL, so a query can pass against H2 and fail against the real database. Testing against the same engine and version as development rules that out. A container of its own means every test run starts from an empty database, untouched by development data. GitHub Actions runners have Docker, so the same tests will run in CI. The cost: `./mvnw test` needs Docker running, and the first run downloads the image.
