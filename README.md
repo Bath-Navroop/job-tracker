@@ -10,6 +10,7 @@ A web app that pulls job postings from public job boards every day, ranks them a
 
 - Java 25, Spring Boot 4.1
 - PostgreSQL 18, run locally with Docker Compose
+- Flyway for database migrations
 - Maven (through the Maven Wrapper, so no separate Maven install is needed)
 - JUnit 5 and Testcontainers for tests
 - GitHub Actions for CI: every push to `main` and every pull request builds the app and runs the tests
