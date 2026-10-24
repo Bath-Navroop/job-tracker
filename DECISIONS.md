@@ -43,3 +43,9 @@ Technical choices for this project: what was chosen, what was rejected, and why.
 **Chose:** Testcontainers starts a fresh `postgres:18` container for the test run, and `@ServiceConnection` points the app at it.
 **Rejected:** H2, an in-memory database; reusing the Docker Compose database.
 **Why:** H2 only imitates PostgreSQL, so a query can pass against H2 and fail against the real database. Testing against the same engine and version as development rules that out. A container of its own means every test run starts from an empty database, untouched by development data. GitHub Actions runners have Docker, so the same tests will run in CI. The cost: `./mvnw test` needs Docker running, and the first run downloads the image.
+
+## 2026-10-23: GitHub Actions for CI
+
+**Chose:** A GitHub Actions workflow that runs `./mvnw verify` on every push to `main` and every pull request.
+**Rejected:** Jenkins, which needs a server of its own, and CircleCI, a separate service to connect; running only `./mvnw test`.
+**Why:** The workflow lives in the repo next to the code, runs free for public repositories, and its runners come with Docker, so the Testcontainers tests run unchanged. `verify` runs the tests and also builds the runnable jar, so a packaging problem fails the build too. The runner uses Temurin 25, the same JDK as development, and caches Maven downloads between runs. The workflow can only read the repo (`permissions: contents: read`), which limits the damage if a step were ever compromised.

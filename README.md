@@ -1,5 +1,7 @@
 # Job Tracker
 
+[![CI](https://github.com/Bath-Navroop/job-tracker/actions/workflows/ci.yml/badge.svg)](https://github.com/Bath-Navroop/job-tracker/actions/workflows/ci.yml)
+
 A web app that pulls job postings from public job boards every day, ranks them against a resume, and tracks applications from saved to offer.
 
 **Status:** early development. The Spring Boot service runs, connects to PostgreSQL, and reports its own health and the database's; the ingestion pipeline and frontend come next.
@@ -10,8 +12,9 @@ A web app that pulls job postings from public job boards every day, ranks them a
 - PostgreSQL 18, run locally with Docker Compose
 - Maven (through the Maven Wrapper, so no separate Maven install is needed)
 - JUnit 5 and Testcontainers for tests
+- GitHub Actions for CI: every push to `main` and every pull request builds the app and runs the tests
 
-Planned: pgvector, a Docker image for the app, React and TypeScript, GitHub Actions, AWS.
+Planned: pgvector, a Docker image for the app, React and TypeScript, AWS.
 
 ## Running locally
 
