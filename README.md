@@ -4,7 +4,7 @@
 
 A web app that pulls job postings from public job boards every day, ranks them against a resume, and tracks applications from saved to offer.
 
-**Status:** early development. The Spring Boot service runs, connects to PostgreSQL, and reports its own health and the database's; the ingestion pipeline and frontend come next.
+**Status:** early development. The API handles accounts, login, and saving and listing job applications, backed by PostgreSQL; the ingestion pipeline and frontend come next.
 
 ## Tech stack
 
@@ -77,6 +77,8 @@ The tests start their own throwaway PostgreSQL container with Testcontainers, se
 | `POST` | `/api/auth/register` | Creates an account from an email and a 15 to 128 character password. Returns `201` with the account's id and email, or `409` if the email is already registered. |
 | `POST` | `/api/auth/login` | Checks an email and password. Returns `200` with a bearer token valid for one hour, or `401`. |
 | `GET` | `/api/auth/me` | Returns the logged-in account's id and email. |
+| `POST` | `/api/applications` | Saves a job application to the logged-in account. Company and job title are required; posting link, status (`SAVED` by default), date applied and notes are optional. Returns `201` with the saved application. |
+| `GET` | `/api/applications` | Lists the logged-in account's applications, newest first. |
 
 Every endpoint except register, login and health needs the token in an `Authorization: Bearer <token>` header.
 
@@ -91,6 +93,21 @@ curl -i http://localhost:8080/api/auth/login \
   -H 'Content-Type: application/json' \
   -d '{"email": "you@example.com", "password": "a long passphrase you will remember"}'
 ```
+
+Then use the `accessToken` from the login response:
+
+```bash
+TOKEN=<accessToken from the login response>
+
+curl -i http://localhost:8080/api/applications \
+  -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"company": "Acme", "jobTitle": "Software Engineer", "status": "APPLIED", "appliedOn": "2026-10-20"}'
+
+curl -i http://localhost:8080/api/applications -H "Authorization: Bearer $TOKEN"
+```
+
+Status is one of `SAVED`, `APPLIED`, `INTERVIEW`, `OFFER` or `REJECTED`, and dates use the `YYYY-MM-DD` format.
 
 ## Design decisions
 

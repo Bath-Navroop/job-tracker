@@ -91,3 +91,33 @@ Technical choices for this project: what was chosen, what was rejected, and why.
 **Chose:** A wrong password and an unknown email get the same `401` and message, and an unknown email still runs a full password check against a placeholder hash.
 **Rejected:** A "no account with that email" message.
 **Why:** A different message, or a faster reply when there is no account to check, would let anyone discover who uses the app.
+
+## 2026-10-24: Applications belong to the account in the token
+
+**Chose:** An application's owner is the user id inside the signed login token. Every applications query filters by that id, and the entity stores it as a plain `userId` field.
+**Rejected:** Reading a user id from the request; a `@ManyToOne User` association on the entity.
+**Why:** The caller controls everything in the request body and URL, so a user id taken from there would let anyone read or write someone else's list. The token's signature proves who is calling. The applications code never needs the rest of the user's row, so a plain id avoids loading it, and the foreign key in the database still guarantees the user exists.
+
+## 2026-10-24: Request and response records at the API boundary
+
+**Chose:** Separate records for what the API accepts (`CreateApplicationRequest`) and what it returns (`ApplicationResponse`). JSON is never bound to the JPA entity directly.
+**Rejected:** Accepting and returning the entity itself.
+**Why:** Binding JSON to the entity would let a client set fields it must never control, such as `id`, `userId` or `createdAt` (a mass-assignment bug). Separate records also keep the JSON stable when the table changes, and the validation rules sit on the request record where they are easy to read.
+
+## 2026-10-24: Application input rules
+
+**Chose:** Company and job title required, at most 200 characters, with surrounding spaces removed. Posting links must start with `http://` or `https://`, at most 2,048 characters. Notes at most 10,000 characters. Status optional, `SAVED` by default, stored by name (`EnumType.STRING`).
+**Rejected:** Storing status as its position in the Java enum (`EnumType.ORDINAL`); accepting any URL.
+**Why:** The frontend will show posting links as clickable links, and a `javascript:` link would run code in the browser of whoever clicks it. Length limits stop one request from storing megabytes of text. Storing the status name means adding or reordering enum values never changes what existing rows mean, and the names match the database's check constraint. An unknown status is rejected with `400` before it reaches the database.
+
+## 2026-10-24: Timestamps set by the entity
+
+**Chose:** `created_at` and `updated_at` are set in JPA lifecycle callbacks (`@PrePersist`, `@PreUpdate`) and rounded to microseconds. Both fields declare their column type as `timestamptz`, as the migration does.
+**Rejected:** Relying only on the database's `DEFAULT now()`; a database trigger for `updated_at`.
+**Why:** A database default fills in the value only on insert, and the saved Java object would not see it without reading the row again. `updated_at` has to change on every update, which a default never does. The callbacks set both before the SQL runs, so the response already carries them. PostgreSQL stores microseconds, so rounding makes the value in the response identical to the stored one. The defaults stay in the schema for rows inserted by hand.
+
+## 2026-10-24: Application list without pagination
+
+**Chose:** `GET /api/applications` returns all of the account's applications, newest first.
+**Rejected:** Pagination, for now.
+**Why:** One person tracks tens to a few hundred applications, which fits comfortably in one response, and the frontend can sort and filter in the browser. Pagination can come later if lists grow that large.
