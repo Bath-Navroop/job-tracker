@@ -6,8 +6,29 @@ spring:
     hibernate:
       ddl-auto: validate
 
+server:
+  # In production, requests arrive through the HTTPS proxy, which passes the client's address
+  # in X-Forwarded-For. Tomcat only trusts that header when the request comes from a private
+  # or loopback address.
+  forward-headers-strategy: native
+
 jwt:
   secret: ${JWT_SECRET:}
+
+auth:
+  rate-limit:
+    # Every login attempt from one address: 10 in a row, then one more every 6 seconds.
+    login-per-ip:
+      attempts: 10
+      period: 1m
+    # Failed login attempts for one email: 5 in a row, then one more every 3 minutes.
+    login-per-email:
+      attempts: 5
+      period: 15m
+    # Every registration attempt from one address: 10 in a row, then one more every 6 minutes.
+    registration-per-ip:
+      attempts: 10
+      period: 1h
 
 management:
   endpoint:

@@ -1,5 +1,6 @@
 package com.navroopbath.jobtracker.auth;
 
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 
 import org.springframework.http.HttpStatus;
@@ -28,19 +29,25 @@ class AuthController {
 
     @PostMapping("/register")
     @ResponseStatus(HttpStatus.CREATED)
-    UserResponse register(@Valid @RequestBody RegisterRequest request) {
-        User user = registrationService.register(request.email(), request.password());
+    UserResponse register(@Valid @RequestBody RegisterRequest request, HttpServletRequest httpRequest) {
+        User user = registrationService.register(request.email(), request.password(), clientAddress(httpRequest));
         return new UserResponse(user.getId(), user.getEmail());
     }
 
     @PostMapping("/login")
-    TokenResponse login(@Valid @RequestBody LoginRequest request) {
-        String token = loginService.login(request.email(), request.password());
+    TokenResponse login(@Valid @RequestBody LoginRequest request, HttpServletRequest httpRequest) {
+        String token = loginService.login(request.email(), request.password(), clientAddress(httpRequest));
         return new TokenResponse(token, "Bearer", TokenService.TOKEN_LIFETIME.toSeconds());
     }
 
     @GetMapping("/me")
     UserResponse me(@AuthenticationPrincipal Jwt jwt) {
         return new UserResponse(Long.valueOf(jwt.getSubject()), jwt.getClaimAsString("email"));
+    }
+
+    // Behind the production proxy, Tomcat has already replaced the remote address with the
+    // client's address from X-Forwarded-For.
+    private static String clientAddress(HttpServletRequest request) {
+        return request.getRemoteAddr();
     }
 }

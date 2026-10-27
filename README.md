@@ -13,6 +13,7 @@ A web app that pulls job postings from public job boards every day, ranks them a
 - Flyway for database migrations
 - Spring Data JPA (Hibernate) for database access
 - Spring Security: Argon2id password hashing and JWT bearer tokens
+- Bucket4j and Caffeine for rate limiting login and registration
 - Maven (through the Maven Wrapper, so no separate Maven install is needed)
 - JUnit 5 and Testcontainers for tests
 - GitHub Actions for CI: every push to `main` and every pull request builds the app and runs the tests
@@ -74,8 +75,8 @@ The tests start their own throwaway PostgreSQL container with Testcontainers, se
 
 | Method | Path | What it does |
 | --- | --- | --- |
-| `POST` | `/api/auth/register` | Creates an account from an email and a 15 to 128 character password. Returns `201` with the account's id and email, or `409` if the email is already registered. |
-| `POST` | `/api/auth/login` | Checks an email and password. Returns `200` with a bearer token valid for one hour, or `401`. |
+| `POST` | `/api/auth/register` | Creates an account from an email and a 15 to 128 character password. Returns `201` with the account's id and email, `409` if the email is already registered, or `429` with a `Retry-After` header after too many attempts. |
+| `POST` | `/api/auth/login` | Checks an email and password. Returns `200` with a bearer token valid for one hour, `401`, or `429` with a `Retry-After` header after too many attempts. |
 | `GET` | `/api/auth/me` | Returns the logged-in account's id and email. |
 | `POST` | `/api/applications` | Saves a job application to the logged-in account. Company and job title are required; posting link, status (`SAVED` by default), date applied and notes are optional. Returns `201` with the saved application and its address in the `Location` header. |
 | `GET` | `/api/applications` | Lists the logged-in account's applications, newest first. |
@@ -84,6 +85,14 @@ The tests start their own throwaway PostgreSQL container with Testcontainers, se
 | `DELETE` | `/api/applications/{id}` | Deletes an application. Returns `204`. |
 
 Every endpoint except register, login and health needs the token in an `Authorization: Bearer <token>` header. An application that does not exist and one that belongs to another account both return `404`.
+
+Login and registration attempts are limited:
+
+- Login, per client address: 10 attempts in a row, then one more every 6 seconds.
+- Login, per email: 5 failed attempts in a row, then one more every 3 minutes. Successful logins don't count.
+- Registration, per client address: 10 attempts in a row, then one more every 6 minutes.
+
+The limits live in memory and are set under `auth.rate-limit` in `application.yaml`.
 
 Errors use the standard [problem details](https://www.rfc-editor.org/rfc/rfc9457) JSON format. When a request has invalid fields, the response lists each one:
 

@@ -12,13 +12,18 @@ class RegistrationService {
 
     private final UserRepository users;
     private final PasswordEncoder passwordEncoder;
+    private final AuthRateLimiter rateLimiter;
 
-    RegistrationService(UserRepository users, PasswordEncoder passwordEncoder) {
+    RegistrationService(UserRepository users, PasswordEncoder passwordEncoder, AuthRateLimiter rateLimiter) {
         this.users = users;
         this.passwordEncoder = passwordEncoder;
+        this.rateLimiter = rateLimiter;
     }
 
-    User register(String email, String password) {
+    User register(String email, String password, String clientAddress) {
+        // Runs before the database lookup and the deliberately slow password hash.
+        rateLimiter.useRegistrationAttempt(clientAddress);
+
         String normalizedEmail = User.normalizeEmail(email);
         if (users.existsByEmail(normalizedEmail)) {
             throw new EmailAlreadyRegisteredException();

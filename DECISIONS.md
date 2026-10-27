@@ -151,3 +151,33 @@ Technical choices for this project: what was chosen, what was rejected, and why.
 **Chose:** `POST /api/applications` returns `Location: /api/applications/{id}`.
 **Rejected:** A full URL built from the incoming request.
 **Why:** HTTP allows a relative `Location` (RFC 9110). In production the app will sit behind an AWS load balancer that handles HTTPS, so the app itself sees plain HTTP on an internal address, and a URL built from the request would point there unless extra proxy settings were added. A relative path is correct wherever the app runs.
+
+## 2026-10-27: Login attempts are limited per address and per email
+
+**Chose:** Two token-bucket limits, checked before the database lookup and the password hash. Per client address, every attempt counts: 10 in a row, then one more every 6 seconds. Per email, only failed attempts count, because a successful login gives its attempt back: 5 in a row, then one more every 3 minutes. Over either limit the API returns `429 Too Many Requests` with a `Retry-After` header, and the same message for both limits. Unknown emails are limited exactly like real ones. The numbers are set under `auth.rate-limit`.
+**Rejected:** A per-address limit alone; locking an account after a number of failures until it is unlocked by hand; a CAPTCHA.
+**Why:** The per-address limit stops one machine from guessing quickly. Because it counts every attempt, it also caps how many Argon2id hashes, each needing 19 MiB of memory, one address can make the server run. An attacker spread over many addresses gets past it, so the per-email limit caps guesses against any one account wherever they come from. Counting only failures per email means someone who logs in often is never slowed down. A hard lockout would let anyone lock a user out just by typing wrong passwords for their email; a limit that refills turns that into a short wait. Limiting unknown emails the same way keeps a `429` from revealing which emails have accounts. A token bucket allows a short burst, such as a few typos, and then a steady rate, unlike a fixed window that resets all at once and allows double the rate around each reset.
+
+## 2026-10-27: Bucket4j and Caffeine, in memory
+
+**Chose:** Bucket4j for the token buckets, kept in one Caffeine cache per limit, which forgets a bucket after one period without use and holds at most 10,000 buckets.
+**Rejected:** A hand-written counter; keeping the counts in PostgreSQL or Redis.
+**Why:** Bucket4j is the standard token-bucket library for Java. It is thread-safe without locks and uses only integer arithmetic, so there are no rounding errors. A bucket nobody has used for one period has refilled completely, so dropping it then changes nothing. The size cap keeps memory bounded; if more distinct addresses than that show up at once, some buckets are dropped early and start again full. One app server runs today, so memory is enough. With several servers, each would keep its own counts and an attacker would get one limit per server; Bucket4j can store the same buckets in PostgreSQL at that point. Counts also reset when the app restarts, which is acceptable for limits measured in minutes.
+
+## 2026-10-27: Registration attempts are limited per address
+
+**Chose:** Every registration attempt from one client address counts, including attempts for an email that is already registered: 10 in a row, then one more every 6 minutes. Over the limit the API returns `429` with a `Retry-After` header. Registration has its own bucket, separate from login's.
+**Rejected:** No limit; a per-email limit; a CAPTCHA.
+**Why:** Registration runs the same slow Argon2id hash as login, so without a limit one address could tie up the server's memory or fill the database with fake accounts. A registration for an email that already exists returns `409`, which reveals that the email has an account, so the limit also slows anyone using registration to check a list of emails. A person registers once, so a few people signing up on the same Wi-Fi still fit in the burst of 10. A per-email limit would add nothing, since each email can only be registered once. A separate bucket means a burst of sign-ups never blocks anyone from logging in.
+
+## 2026-10-27: Client address from X-Forwarded-For, trusted only from internal addresses
+
+**Chose:** `server.forward-headers-strategy: native`, which turns on Tomcat's `RemoteIpValve`. When a request comes from a private or loopback address, such as the HTTPS proxy in production, Tomcat takes the client's address from the `X-Forwarded-For` header.
+**Rejected:** Reading `X-Forwarded-For` in our own code; leaving it off.
+**Why:** In production every request reaches the app through the HTTPS proxy, so without this every user would appear to come from the proxy and all would share one login limit. A client can write anything into `X-Forwarded-For`, so Tomcat only trusts the header when the connection itself comes from an internal address; anyone connecting directly from the internet is identified by their real address. When the proxy appends the real address to a header the client already filled in, Tomcat reads the list from the right and stops at the first address that is not an internal proxy, so a forged value is ignored. The same setting makes Tomcat honor `X-Forwarded-Proto`, so the app knows when the original request used HTTPS.
+
+## 2026-10-27: Tests raise the per-address login limit
+
+**Chose:** `src/test/resources/config/application.yaml`, which Spring Boot loads on top of the main `application.yaml` in every test, raises both per-address limits to 1,000. `RateLimitTests` runs in its own Spring context with small limits (3 logins per address, 2 failed logins per email, 2 registrations per address), and gives each request an address from the documentation range `198.51.100.0/24` through `X-Forwarded-For`.
+**Rejected:** Turning the limiter off in tests; resetting it between tests from test code.
+**Why:** Every test request comes from 127.0.0.1, so the real limits of 10 would throttle the test suite itself. The rate limit tests still run the real limiter, with numbers small enough to read at a glance, and separate addresses keep each test independent. They also exercise the `X-Forwarded-For` handling, since test requests come from loopback, which Tomcat trusts. The cost is one more test context with its own PostgreSQL container, a few seconds per run.

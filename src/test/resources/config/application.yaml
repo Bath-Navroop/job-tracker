@@ -1,0 +1,9 @@
+# Spring Boot loads this file on top of src/main/resources/application.yaml in every test.
+# All test requests come from 127.0.0.1, so the real per-address limits would throttle
+# the test suite itself. RateLimitTests sets its own small limits instead.
+auth:
+  rate-limit:
+    login-per-ip:
+      attempts: 1000
+    registration-per-ip:
+      attempts: 1000
