@@ -17,8 +17,9 @@ A web app that pulls job postings from public job boards every day, ranks them a
 - Maven (through the Maven Wrapper, so no separate Maven install is needed)
 - JUnit 5 and Testcontainers for tests
 - GitHub Actions for CI: every push to `main` and every pull request builds the app and runs the tests
+- Docker: a multi-stage `Dockerfile` builds the app image on Eclipse Temurin 25
 
-Planned: pgvector, a Docker image for the app, React and TypeScript, AWS.
+Planned: pgvector, React and TypeScript, AWS.
 
 ## Running locally
 
@@ -59,6 +60,20 @@ To delete the database and start fresh:
 
 ```bash
 docker compose down -v
+```
+
+## Running the app in Docker
+
+Requires only Docker, with Docker running. This runs the same image that will run in production.
+
+```bash
+docker compose --profile app up --build
+```
+
+This builds the image from the `Dockerfile` and starts it next to the PostgreSQL container. The first build downloads Maven and every dependency, so it takes a few minutes; later builds reuse that layer until `pom.xml` changes. The app is on http://localhost:8080 as before. Stop it with Ctrl+C, then remove the containers with:
+
+```bash
+docker compose --profile app down
 ```
 
 ## Running the tests

@@ -1,0 +1,7 @@
+# Send Docker only what the build needs. Everything else, including any local
+# secrets, stays out of the image.
+*
+!mvnw
+!.mvn
+!pom.xml
+!src/main
