@@ -60,6 +60,16 @@ public class Application {
         this.notes = notes;
     }
 
+    void update(String company, String jobTitle, String postingUrl,
+            ApplicationStatus status, LocalDate appliedOn, String notes) {
+        this.company = company;
+        this.jobTitle = jobTitle;
+        this.postingUrl = postingUrl;
+        this.status = status;
+        this.appliedOn = appliedOn;
+        this.notes = notes;
+    }
+
     @PrePersist
     void onCreate() {
         createdAt = now();

@@ -121,3 +121,33 @@ Technical choices for this project: what was chosen, what was rejected, and why.
 **Chose:** `GET /api/applications` returns all of the account's applications, newest first.
 **Rejected:** Pagination, for now.
 **Why:** One person tracks tens to a few hundred applications, which fits comfortably in one response, and the frontend can sort and filter in the browser. Pagination can come later if lists grow that large.
+
+## 2026-10-27: Updates replace the whole application (PUT)
+
+**Chose:** `PUT /api/applications/{id}` with every field of the application. Company, job title and status are required; an optional field left out is cleared.
+**Rejected:** `PATCH` with only the changed fields (JSON Merge Patch).
+**Why:** The frontend always has the whole application in hand, both in the edit form and when a card moves on the board, so sending all of it costs nothing. A full replacement uses the same validation rules as create, and sending the same request twice leaves the same result (PUT is idempotent). With `PATCH`, a Java record cannot tell a field that was left out from one sent as `null` to clear it, so it needs wrapper types or hand-parsed JSON. Status is required on `PUT` so a client that forgets it cannot silently reset an application to `SAVED`. The cost: if the same application is edited in two tabs, the last save wins. A version column (optimistic locking) can fix that if it ever matters.
+
+## 2026-10-27: Another user's application returns 404
+
+**Chose:** Get, update and delete look an application up by its id and the caller's user id together (`findByIdAndUserId`). An application that does not exist and one owned by someone else both return the same `404 Application not found.`
+**Rejected:** `403 Forbidden` for applications owned by someone else; loading by id first and then comparing owners in Java.
+**Why:** A `403` confirms that the id exists, which tells a stranger something about other accounts. Putting the owner in the query means there is no code path that loads another user's row and then forgets to check it. Deleting twice returns `204` and then `404`; the second call changes nothing, so `DELETE` is still idempotent.
+
+## 2026-10-27: Updates rely on Hibernate's dirty checking
+
+**Chose:** The service loads the application inside a `@Transactional` method and changes it through one `update(...)` method on the entity; Hibernate compares it with the loaded copy and writes an `UPDATE` when the transaction commits. The entity has no setters.
+**Rejected:** Calling `save()` after changing the entity; a hand-written `UPDATE` query.
+**Why:** Inside a transaction, Hibernate already tracks every entity it loaded, so `save()` adds nothing. If no field actually changed, no `UPDATE` runs and `updated_at` stays the same. A single `update(...)` method, visible only inside the `application` package, means the fields can only change together and only through the service. `@PreUpdate` sets `updated_at` during that flush, so the response already carries the new time.
+
+## 2026-10-27: Validation errors list each invalid field
+
+**Chose:** An `ApiExceptionHandler` that extends Spring's `ResponseEntityExceptionHandler` and adds an `errors` list of `{field, message}` pairs, sorted by field, to the problem details body of a `400`. It replaces Spring Boot's own problem details handler, so `spring.mvc.problemdetails.enabled` was removed.
+**Rejected:** Spring's default, which only says "Invalid request content."; a hand-written `@ExceptionHandler` for each exception type.
+**Why:** The frontend can show each message under the input it belongs to. Extending `ResponseEntityExceptionHandler` keeps Spring's problem details handling for every other error (`404` for unknown paths, `405`, unreadable JSON, and our own `ErrorResponseException`s) and changes only the validation case. Spring Boot registers its own handler only when no other `ResponseEntityExceptionHandler` exists, so the property no longer did anything. Validation reports errors in no fixed order, and sorting makes the same bad request always produce the same response.
+
+## 2026-10-27: Location header is a relative path
+
+**Chose:** `POST /api/applications` returns `Location: /api/applications/{id}`.
+**Rejected:** A full URL built from the incoming request.
+**Why:** HTTP allows a relative `Location` (RFC 9110). In production the app will sit behind an AWS load balancer that handles HTTPS, so the app itself sees plain HTTP on an internal address, and a URL built from the request would point there unless extra proxy settings were added. A relative path is correct wherever the app runs.

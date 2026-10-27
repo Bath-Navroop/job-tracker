@@ -4,7 +4,7 @@
 
 A web app that pulls job postings from public job boards every day, ranks them against a resume, and tracks applications from saved to offer.
 
-**Status:** early development. The API handles accounts, login, and saving and listing job applications, backed by PostgreSQL; the ingestion pipeline and frontend come next.
+**Status:** early development. The API handles accounts, login, and saving, listing, updating and deleting job applications, backed by PostgreSQL; the ingestion pipeline and frontend come next.
 
 ## Tech stack
 
@@ -77,12 +77,31 @@ The tests start their own throwaway PostgreSQL container with Testcontainers, se
 | `POST` | `/api/auth/register` | Creates an account from an email and a 15 to 128 character password. Returns `201` with the account's id and email, or `409` if the email is already registered. |
 | `POST` | `/api/auth/login` | Checks an email and password. Returns `200` with a bearer token valid for one hour, or `401`. |
 | `GET` | `/api/auth/me` | Returns the logged-in account's id and email. |
-| `POST` | `/api/applications` | Saves a job application to the logged-in account. Company and job title are required; posting link, status (`SAVED` by default), date applied and notes are optional. Returns `201` with the saved application. |
+| `POST` | `/api/applications` | Saves a job application to the logged-in account. Company and job title are required; posting link, status (`SAVED` by default), date applied and notes are optional. Returns `201` with the saved application and its address in the `Location` header. |
 | `GET` | `/api/applications` | Lists the logged-in account's applications, newest first. |
+| `GET` | `/api/applications/{id}` | Returns one application. |
+| `PUT` | `/api/applications/{id}` | Replaces an application with the fields sent. Company, job title and status are required; optional fields left out are cleared. Returns `200` with the updated application. |
+| `DELETE` | `/api/applications/{id}` | Deletes an application. Returns `204`. |
 
-Every endpoint except register, login and health needs the token in an `Authorization: Bearer <token>` header.
+Every endpoint except register, login and health needs the token in an `Authorization: Bearer <token>` header. An application that does not exist and one that belongs to another account both return `404`.
 
-Errors use the standard [problem details](https://www.rfc-editor.org/rfc/rfc9457) JSON format. To try it with the app running:
+Errors use the standard [problem details](https://www.rfc-editor.org/rfc/rfc9457) JSON format. When a request has invalid fields, the response lists each one:
+
+```json
+{
+  "type": "about:blank",
+  "title": "Bad Request",
+  "status": 400,
+  "detail": "Some fields are invalid.",
+  "instance": "/api/applications",
+  "errors": [
+    {"field": "company", "message": "must not be blank"},
+    {"field": "postingUrl", "message": "must be an http or https link"}
+  ]
+}
+```
+
+To try the API with the app running:
 
 ```bash
 curl -i http://localhost:8080/api/auth/register \
@@ -105,6 +124,17 @@ curl -i http://localhost:8080/api/applications \
   -d '{"company": "Acme", "jobTitle": "Software Engineer", "status": "APPLIED", "appliedOn": "2026-10-20"}'
 
 curl -i http://localhost:8080/api/applications -H "Authorization: Bearer $TOKEN"
+```
+
+To change or delete one, use the `id` from the responses above (here `1`):
+
+```bash
+curl -i -X PUT http://localhost:8080/api/applications/1 \
+  -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"company": "Acme", "jobTitle": "Software Engineer", "status": "INTERVIEW", "appliedOn": "2026-10-20"}'
+
+curl -i -X DELETE http://localhost:8080/api/applications/1 -H "Authorization: Bearer $TOKEN"
 ```
 
 Status is one of `SAVED`, `APPLIED`, `INTERVIEW`, `OFFER` or `REJECTED`, and dates use the `YYYY-MM-DD` format.
